@@ -19,7 +19,6 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 確保網址格式為標準連結
     let cleanUrl = url.trim();
     if (!cleanUrl.endsWith('/')) {
       cleanUrl += '/';
@@ -37,7 +36,7 @@ export default async function handler(req, res) {
     const html = await response.text();
     let caption = '';
 
-    // 備用方案 1: 嘗試從 JSON-LD 結構數據提取 caption / articleBody
+    // 方案 1: 從 JSON-LD 提取
     const jsonLdMatch = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/i);
     if (jsonLdMatch && jsonLdMatch[1]) {
       try {
@@ -49,12 +48,10 @@ export default async function handler(req, res) {
         } else if (jsonLd?.caption) {
           caption = jsonLd.caption;
         }
-      } catch (e) {
-        // Continue if JSON parse fails
-      }
+      } catch (e) {}
     }
 
-    // 備用方案 2: OpenGraph description
+    // 方案 2: OpenGraph description
     if (!caption) {
       const ogDescMatch = html.match(/<meta\s+property="og:description"\s+content="([^"]*)"/i) ||
                           html.match(/<meta\s+name="description"\s+content="([^"]*)"/i);
@@ -63,7 +60,7 @@ export default async function handler(req, res) {
       }
     }
 
-    // 備用方案 3: OpenGraph title
+    // 方案 3: OpenGraph title
     if (!caption) {
       const ogTitleMatch = html.match(/<meta\s+property="og:title"\s+content="([^"]*)"/i);
       if (ogTitleMatch && ogTitleMatch[1]) {
@@ -71,16 +68,18 @@ export default async function handler(req, res) {
       }
     }
 
-    // 解碼 HTML 實體字符
+    // 萬用 HTML 實體與 Unicode 數字編碼（&#x...;）解碼器
     caption = caption
+      .replace(/&#x([0-9a-fA-F]+);/g, (match, code) => String.fromCodePoint(parseInt(code, 16)))
+      .replace(/&#([0-9]+);/g, (match, code) => String.fromCodePoint(parseInt(code, 10)))
       .replace(/&quot;/g, '"')
       .replace(/&amp;/g, '&')
-      .replace(/&#10;/g, '\n')
       .replace(/&lt;/g, '<')
       .replace(/&gt;/g, '>')
+      .replace(/&nbsp;/g, ' ')
       .replace(/\\n/g, '\n');
 
-    // 清理 IG 預設的冗餘開頭（如 "100 Likes, 2 Comments - Account on Instagram: ..."）
+    // 清理 IG 預設冗餘開頭
     if (caption.includes('on Instagram:')) {
       const parts = caption.split('on Instagram:');
       if (parts[1] && parts[1].trim()) {
@@ -89,7 +88,7 @@ export default async function handler(req, res) {
     }
 
     if (!caption.trim()) {
-      return res.status(404).json({ error: '此 IG 貼文設有隱私或受限制，請直接切換至「貼上純文字/Captions」複製內文即可！' });
+      return res.status(404).json({ error: '無法讀取此 IG 內文，請使用「貼上純文字」功能！' });
     }
 
     return res.status(200).json({ caption });
