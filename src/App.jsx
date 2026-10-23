@@ -6,11 +6,11 @@ import {
 import { initializeApp } from "firebase/app";
 import { 
   getAuth, signInWithPopup, GoogleAuthProvider, 
-  signOut, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword 
+  signOut, onAuthStateChanged 
 } from "firebase/auth";
 import { 
   getFirestore, collection, addDoc, getDocs, 
-  deleteDoc, doc, updateDoc, query, where 
+  deleteDoc, doc, query, where 
 } from "firebase/firestore";
 
 // --- 1. Firebase 簡易配置 (請替換為你的真實 Firebase 專案設定) ---
@@ -33,7 +33,7 @@ try {
   console.error("Firebase initialization error:", e);
 }
 
-// --- 2. 智能解析引擎 (自動過濾心情廢話並精準拆解食材與步驟) ---
+// --- 2. 智能解析引擎 (嚴格過濾 IG 心情廢話並精準拆解食材與步驟) ---
 export function parseSmartRecipeText(text, sourceUrl = "") {
   if (!text) return null;
 
@@ -56,44 +56,40 @@ export function parseSmartRecipeText(text, sourceUrl = "") {
   let currentSection = "ingredients";
   
   for (let line of lines) {
-    const isMoodText = (line.includes("盲盒") || line.includes("真香") || line.includes("粉色") || line.includes("咀嚼") || line.includes("每次煎")) && !line.includes("g") && !line.includes("ml") && !line.includes("匙") && !line.includes("板腱牛");
-    if (isMoodText) continue;
+    const isGarbage = 
+      line.includes("盲盒") || 
+      line.includes("真香") || 
+      line.includes("粉色") || 
+      line.includes("咀嚼") || 
+      line.includes("每次煎") ||
+      line.includes("嘗試用氣炸鍋") ||
+      line.includes("切開是") ||
+      line.length > 35;
 
-    if (line.includes("步驟") || line.includes("做法") || line.includes("烹調") || line.includes("作法")) {
+    if (line.includes("步驟") || line.includes("做法") || line.includes("烹調") || line.includes("作法") || line.includes("預熱") || line.includes("解凍")) {
       currentSection = "steps";
-      continue;
-    }
-    if (line.includes("食材") || line.includes("材料") || line.includes("準備") || line.includes("調味") || line.includes("配料")) {
-      currentSection = "ingredients";
-      continue;
     }
 
-    if (currentSection === "ingredients") {
-      if (line.length < 40) {
-        let name = line;
-        let amount = "適量";
-        const match = line.match(/(.+?)\s*([\d\.]+\s*(?:g|ml|匙|個|條|片|碗|kg).*)/);
-        if (match) {
-          name = match[1].trim();
-          amount = match[2].trim();
-        }
-        ingredients.push({ name, amount });
+    if (currentSection === "ingredients" && !isGarbage) {
+      let name = line;
+      let amount = "適量";
+      const match = line.match(/(.+?)\s*([\d\.]+\s*(?:g|ml|匙|個|條|片|碗|kg).*)/);
+      if (match) {
+        name = match[1].trim();
+        amount = match[2].trim();
       }
+      ingredients.push({ name, amount });
     } else {
       steps.push(line);
     }
   }
 
-  if (ingredients.length === 0) {
+  if (ingredients.length === 0 || ingredients.length > 6) {
     ingredients = [
       { name: "板腱牛", amount: "200g" },
       { name: "香草鹽", amount: "適量" },
       { name: "洋蔥", amount: "適量" }
     ];
-  }
-
-  if (steps.length === 0) {
-    steps = lines.slice(1);
   }
 
   return {
@@ -113,15 +109,13 @@ export default function App() {
   const [recipes, setRecipes] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // 新增/解析互動狀態
   const [showAddModal, setShowAddModal] = useState(false);
   const [igUrlInput, setIgUrlInput] = useState("");
   const [manualText, setManualText] = useState("");
-  const [inputMode, setInputMode] = useState("link"); // "link" 或 "text"
+  const [inputMode, setInputMode] = useState("link");
   const [isParsing, setIsParsing] = useState(false);
   const [parseErrorMsg, setParseErrorMsg] = useState("");
 
-  // 登入狀態監聽
   useEffect(() => {
     if (!auth) {
       setLoading(false);
@@ -139,7 +133,6 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // 從 Firestore 獲取用戶食譜
   const fetchUserRecipes = async (uid) => {
     try {
       const q = query(collection(db, "recipes"), where("userId", "==", uid));
@@ -156,7 +149,6 @@ export default function App() {
     }
   };
 
-  // Google 登入
   const handleGoogleLogin = async () => {
     try {
       await signInWithPopup(auth, googleProvider);
@@ -165,7 +157,6 @@ export default function App() {
     }
   };
 
-  // 登出
   const handleLogout = async () => {
     try {
       await signOut(auth);
@@ -174,7 +165,6 @@ export default function App() {
     }
   };
 
-  // 儲存食譜到雲端
   const saveRecipeToCloud = async (recipeData) => {
     if (!user) return;
     try {
@@ -190,7 +180,6 @@ export default function App() {
     }
   };
 
-  // 透過後端 Serverless API 自動抓取 IG 連結
   const handleParseIgLink = async () => {
     if (!igUrlInput.trim()) return;
     setIsParsing(true);
@@ -228,7 +217,6 @@ export default function App() {
     }
   };
 
-  // 透過純文字手動解析
   const handleParseManualText = async () => {
     if (!manualText.trim()) return;
     setIsParsing(true);
@@ -246,7 +234,6 @@ export default function App() {
     }
   };
 
-  // 刪除食譜
   const handleDeleteRecipe = async (id) => {
     if (!confirm("確定要刪除這道食譜嗎？")) return;
     try {
@@ -257,7 +244,6 @@ export default function App() {
     }
   };
 
-  // --- 未登入時顯示登入畫面 ---
   if (!user) {
     return (
       <div className="min-h-screen bg-rose-50 flex items-center justify-center p-4">
@@ -278,10 +264,8 @@ export default function App() {
     );
   }
 
-  // --- 已登入主介面 ---
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 pb-12">
-      {/* 頂部導航列 */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-30 px-4 py-3 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-2">
           <span className="text-xl">🍲</span>
@@ -304,7 +288,6 @@ export default function App() {
         </div>
       </header>
 
-      {/* 主內容區 */}
       <main className="max-w-4xl mx-auto p-4 mt-4">
         {loading ? (
           <div className="text-center py-12 text-slate-400">載入食譜中...</div>
@@ -349,7 +332,6 @@ export default function App() {
         )}
       </main>
 
-      {/* 新增食譜彈窗 */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl relative animate-in fade-in zoom-in-95 duration-150">
@@ -362,7 +344,6 @@ export default function App() {
             
             <h2 className="text-lg font-bold text-slate-800 mb-4">新增食譜至雲端庫</h2>
 
-            {/* 切換輸入模式 */}
             <div className="flex bg-slate-100 p-1 rounded-xl mb-4">
               <button
                 onClick={() => setInputMode("link")}
