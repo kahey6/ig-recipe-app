@@ -13,12 +13,12 @@ import {
   deleteDoc, doc, query, where 
 } from "firebase/firestore";
 
-// --- 1. 真實 Firebase 專案設定 ---
+// --- 1. 真實 Firebase 專案設定 (已修正 apiKey 的打字錯誤) ---
 const firebaseConfig = {
-  apiKey: "AIzaSyBTGhqIpECGnSGYoC6dVsiKsUQ9T0q-kY",
+  apiKey: "AIzaSyBTgHqIpECGnSGYoC6dVsiKsUQ9T0q-kY",
   authDomain: "igcooking.firebaseapp.com",
   projectId: "igcooking",
-  storageBucket: "igcooking.appspot.com",
+  storageBucket: "igcooking.firebasestorage.app",
   messagingSenderId: "266468610536",
   appId: "1:266468610536:web:765f79132378df2ba6545d"
 };
