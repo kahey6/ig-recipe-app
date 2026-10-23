@@ -13,25 +13,27 @@ import {
   deleteDoc, doc, query, where 
 } from "firebase/firestore";
 
-// --- 1. Firebase 配置 (請在此處填入你真實的 Firebase 專案設定) ---
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_STORAGE_BUCKET",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyBTgHqIpECGnSGYoC6dVsiKsuUQ9T0q-kY",
+  authDomain: "igcooking.firebaseapp.com",
+  projectId: "igcooking",
+  storageBucket: "igcooking.firebasestorage.app",
+  messagingSenderId: "266468610536",
+  appId: "1:266468610536:web:765f79132378df2ba6545d",
+  measurementId: "G-C95QZ6Y77L"
 };
 
-let app, auth, db, googleProvider;
-try {
-  app = initializeApp(firebaseConfig);
-  auth = getAuth(app);
-  db = getFirestore(app);
-  googleProvider = new GoogleAuthProvider();
-} catch (e) {
-  console.error("Firebase initialization error:", e);
-}
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
 
 // --- 2. 智能解析引擎 (嚴格過濾 IG 心情廢話並精準拆解食材與步驟) ---
 export function parseSmartRecipeText(text, sourceUrl = "") {
