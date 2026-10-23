@@ -36,7 +36,7 @@ export default async function handler(req, res) {
     const html = await response.text();
     let caption = '';
 
-    // 方案 1: 從 JSON-LD 提取
+    // 1. 從 JSON-LD 提取
     const jsonLdMatch = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/i);
     if (jsonLdMatch && jsonLdMatch[1]) {
       try {
@@ -51,7 +51,7 @@ export default async function handler(req, res) {
       } catch (e) {}
     }
 
-    // 方案 2: OpenGraph description
+    // 2. OpenGraph description
     if (!caption) {
       const ogDescMatch = html.match(/<meta\s+property="og:description"\s+content="([^"]*)"/i) ||
                           html.match(/<meta\s+name="description"\s+content="([^"]*)"/i);
@@ -60,7 +60,7 @@ export default async function handler(req, res) {
       }
     }
 
-    // 方案 3: OpenGraph title
+    // 3. OpenGraph title
     if (!caption) {
       const ogTitleMatch = html.match(/<meta\s+property="og:title"\s+content="([^"]*)"/i);
       if (ogTitleMatch && ogTitleMatch[1]) {
@@ -79,7 +79,6 @@ export default async function handler(req, res) {
       .replace(/&nbsp;/g, ' ')
       .replace(/\\n/g, '\n');
 
-    // 清理 IG 預設冗餘開頭
     if (caption.includes('on Instagram:')) {
       const parts = caption.split('on Instagram:');
       if (parts[1] && parts[1].trim()) {
