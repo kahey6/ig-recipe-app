@@ -1,5 +1,4 @@
 export default async function handler(req, res) {
-  // 設定 CORS Header
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
@@ -20,42 +19,77 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 使用偽裝 User-Agent 抓取 IG 頁面
-    const response = await fetch(url, {
+    // 確保網址格式為標準連結
+    let cleanUrl = url.trim();
+    if (!cleanUrl.endsWith('/')) {
+      cleanUrl += '/';
+    }
+
+    const response = await fetch(cleanUrl, {
       headers: {
         'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
         'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       },
     });
 
     const html = await response.text();
-
-    // 透過正則表達式提取 OpenGraph meta description (含有 IG Caption)
     let caption = '';
-    const ogDescMatch = html.match(/<meta\s+property="og:description"\s+content="([^"]*)"/i) ||
-                        html.match(/<meta\s+name="description"\s+content="([^"]*)"/i);
 
-    if (ogDescMatch && ogDescMatch[1]) {
-      caption = ogDescMatch[1];
-    } else {
-      // 備用方案：搜尋 title meta
+    // 備用方案 1: 嘗試從 JSON-LD 結構數據提取 caption / articleBody
+    const jsonLdMatch = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/i);
+    if (jsonLdMatch && jsonLdMatch[1]) {
+      try {
+        const jsonLd = JSON.parse(jsonLdMatch[1]);
+        if (Array.isArray(jsonLd) && jsonLd[0]?.articleBody) {
+          caption = jsonLd[0].articleBody;
+        } else if (jsonLd?.articleBody) {
+          caption = jsonLd.articleBody;
+        } else if (jsonLd?.caption) {
+          caption = jsonLd.caption;
+        }
+      } catch (e) {
+        // Continue if JSON parse fails
+      }
+    }
+
+    // 備用方案 2: OpenGraph description
+    if (!caption) {
+      const ogDescMatch = html.match(/<meta\s+property="og:description"\s+content="([^"]*)"/i) ||
+                          html.match(/<meta\s+name="description"\s+content="([^"]*)"/i);
+      if (ogDescMatch && ogDescMatch[1]) {
+        caption = ogDescMatch[1];
+      }
+    }
+
+    // 備用方案 3: OpenGraph title
+    if (!caption) {
       const ogTitleMatch = html.match(/<meta\s+property="og:title"\s+content="([^"]*)"/i);
       if (ogTitleMatch && ogTitleMatch[1]) {
         caption = ogTitleMatch[1];
       }
     }
 
-    // 解碼 HTML Entities (例如 &quot;, &#10; 換行符等)
+    // 解碼 HTML 實體字符
     caption = caption
       .replace(/&quot;/g, '"')
       .replace(/&amp;/g, '&')
       .replace(/&#10;/g, '\n')
       .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>');
+      .replace(/&gt;/g, '>')
+      .replace(/\\n/g, '\n');
+
+    // 清理 IG 預設的冗餘開頭（如 "100 Likes, 2 Comments - Account on Instagram: ..."）
+    if (caption.includes('on Instagram:')) {
+      const parts = caption.split('on Instagram:');
+      if (parts[1] && parts[1].trim()) {
+        caption = parts[1].replace(/^["“]/, '').replace(/["”]$/, '').trim();
+      }
+    }
 
     if (!caption.trim()) {
-      return res.status(404).json({ error: '無法從該 IG 網址讀取內文，請嘗試使用純文字複製貼上。' });
+      return res.status(404).json({ error: '此 IG 貼文設有隱私或受限制，請直接切換至「貼上純文字/Captions」複製內文即可！' });
     }
 
     return res.status(200).json({ caption });
